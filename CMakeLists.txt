@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(JesterStep VERSION 1.2.0 LANGUAGES CXX)
+project(JesterStep VERSION 1.2.0 LANGUAGES CXX RC)
 
 add_executable(JesterStep WIN32
     src/appbar.cpp
     src/color_utils.cpp
+    src/jesterstep.rc
     src/launcher_editor_window.cpp
     src/main.cpp
     src/panel_window.cpp

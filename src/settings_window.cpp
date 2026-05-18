@@ -3,6 +3,7 @@
 #include "appbar.h"
 #include "color_utils.h"
 #include "launcher_editor_window.h"
+#include "resource.h"
 #include "settings_store.h"
 #include "shared_state.h"
 
@@ -554,6 +555,7 @@ void show_settings_window(AppState& state, HWND parent) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = SETTINGS_CLASS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(IDI_APP_ICON));
 
     RegisterClassW(&wc);
 

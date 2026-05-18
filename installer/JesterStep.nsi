@@ -7,6 +7,7 @@ RequestExecutionLevel user
 !define APP_EXE "JesterStep.exe"
 !define APP_VERSION "1.3.0"
 !define APP_PUBLISHER "Jesterace"
+!define APP_ICON "..\resources\jesterstep.ico"
 
 Name "${APP_NAME}"
 OutFile "..\dist\JesterStep-Setup.exe"
@@ -14,8 +15,8 @@ InstallDir "$LOCALAPPDATA\JesterStep"
 InstallDirRegKey HKCU "Software\JesterStep" "InstallDir"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "${APP_ICON}"
+!define MUI_UNICON "${APP_ICON}"
 
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch JesterStep"
@@ -43,8 +44,8 @@ Section "JesterStep" SEC_MAIN
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
     CreateDirectory "$SMPROGRAMS\JesterStep"
-    CreateShortcut "$SMPROGRAMS\JesterStep\JesterStep.lnk" "$INSTDIR\${APP_EXE}"
-    CreateShortcut "$SMPROGRAMS\JesterStep\Uninstall JesterStep.lnk" "$INSTDIR\Uninstall.exe"
+    CreateShortcut "$SMPROGRAMS\JesterStep\JesterStep.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
+    CreateShortcut "$SMPROGRAMS\JesterStep\Uninstall JesterStep.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
 
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JesterStep" "DisplayName" "${APP_NAME}"
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JesterStep" "DisplayVersion" "${APP_VERSION}"
@@ -58,7 +59,7 @@ Section "JesterStep" SEC_MAIN
 SectionEnd
 
 Section "Desktop shortcut" SEC_DESKTOP
-    CreateShortcut "$DESKTOP\JesterStep.lnk" "$INSTDIR\${APP_EXE}"
+    CreateShortcut "$DESKTOP\JesterStep.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
 SectionEnd
 
 Section "Uninstall"

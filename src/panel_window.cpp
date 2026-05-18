@@ -1,6 +1,7 @@
 #include "panel_window.h"
 
 #include "appbar.h"
+#include "resource.h"
 #include "root_menu.h"
 #include "shared_state.h"
 #include "task_list.h"
@@ -343,6 +344,7 @@ HWND create_panel_window(HINSTANCE instance, AppState& state) {
     wc.hInstance = instance;
     wc.lpszClassName = APP_CLASS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_APP_ICON));
 
     RegisterClassW(&wc);
 
