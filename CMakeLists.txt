@@ -11,6 +11,7 @@ add_executable(JesterStep WIN32
     src/root_menu.cpp
     src/settings_store.cpp
     src/settings_window.cpp
+    src/task_list.cpp
 )
 
 target_compile_features(JesterStep PRIVATE cxx_std_17)

@@ -44,6 +44,11 @@ struct Launcher {
     std::wstring command;
 };
 
+struct TaskEntry {
+    HWND hwnd = nullptr;
+    std::wstring title;
+};
+
 struct AppState {
     HWND panel_hwnd = nullptr;
     HWND settings_hwnd = nullptr;
@@ -57,6 +62,7 @@ struct AppState {
     COLORREF panel_text_color = RGB(230, 230, 230);
 
     std::vector<Launcher> launchers;
+    std::vector<TaskEntry> tasks;
 };
 
 inline AppState* app_state_from_hwnd(HWND hwnd) {

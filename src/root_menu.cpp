@@ -4,6 +4,7 @@
 #include "settings_store.h"
 #include "settings_window.h"
 #include "shared_state.h"
+#include "task_list.h"
 
 #include <shellapi.h>
 
@@ -16,6 +17,7 @@ static void reload_saved_settings(AppState& state) {
 
     if (state.panel_hwnd) {
         position_appbar(state, state.panel_hwnd);
+        refresh_task_list(state);
         InvalidateRect(state.panel_hwnd, nullptr, TRUE);
     }
 
