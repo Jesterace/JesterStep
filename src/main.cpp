@@ -31,6 +31,78 @@ static int clamp_int(int value, int min_value, int max_value) {
     return value;
 }
 
+static std::wstring get_settings_dir() {
+    wchar_t appdata[MAX_PATH]{};
+    DWORD len = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+
+    if (len == 0 || len >= MAX_PATH) {
+        return L".";
+    }
+
+    return std::wstring(appdata) + L"\\JesterStep";
+}
+
+static std::wstring get_settings_path() {
+    return get_settings_dir() + L"\\settings.ini";
+}
+
+static void ensure_settings_dir() {
+    std::wstring dir = get_settings_dir();
+    CreateDirectoryW(dir.c_str(), nullptr);
+}
+
+static void load_settings() {
+    std::wstring path = get_settings_path();
+
+    wchar_t position[32]{};
+    GetPrivateProfileStringW(
+        L"Panel",
+        L"Position",
+        L"top",
+        position,
+        32,
+        path.c_str()
+    );
+
+    g_panel_top = lstrcmpiW(position, L"bottom") != 0;
+
+    int saved_height = GetPrivateProfileIntW(
+        L"Panel",
+        L"Height",
+        36,
+        path.c_str()
+    );
+
+    g_panel_height = clamp_int(saved_height, 24, 96);
+}
+
+static bool save_settings() {
+    ensure_settings_dir();
+
+    std::wstring path = get_settings_path();
+
+    bool ok = true;
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Panel",
+        L"Position",
+        g_panel_top ? L"top" : L"bottom",
+        path.c_str()
+    );
+
+    wchar_t height_text[32]{};
+    swprintf_s(height_text, L"%d", g_panel_height);
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Panel",
+        L"Height",
+        height_text,
+        path.c_str()
+    );
+
+    return ok;
+}
+
 static std::wstring get_time_text() {
     SYSTEMTIME st{};
     GetLocalTime(&st);
@@ -129,6 +201,21 @@ static void notify_appbar_windowpos(HWND hwnd) {
     SHAppBarMessage(ABM_WINDOWPOSCHANGED, &abd);
 }
 
+static void refresh_settings_window_controls(HWND hwnd) {
+    HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
+    HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
+
+    if (position_combo) {
+        SendMessageW(position_combo, CB_SETCURSEL, g_panel_top ? 0 : 1, 0);
+    }
+
+    if (height_edit) {
+        wchar_t height_text[32]{};
+        swprintf_s(height_text, L"%d", g_panel_height);
+        SetWindowTextW(height_edit, height_text);
+    }
+}
+
 static void apply_settings_from_window(HWND hwnd) {
     HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
@@ -142,13 +229,24 @@ static void apply_settings_from_window(HWND hwnd) {
     int new_height = _wtoi(height_text);
     g_panel_height = clamp_int(new_height, 24, 96);
 
-    wchar_t fixed_height[32]{};
-    swprintf_s(fixed_height, L"%d", g_panel_height);
-    SetWindowTextW(height_edit, fixed_height);
+    refresh_settings_window_controls(hwnd);
 
     if (g_panel_hwnd) {
         position_appbar(g_panel_hwnd);
         InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+    }
+}
+
+static void reload_saved_settings() {
+    load_settings();
+
+    if (g_panel_hwnd) {
+        position_appbar(g_panel_hwnd);
+        InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+    }
+
+    if (g_settings_hwnd) {
+        refresh_settings_window_controls(g_settings_hwnd);
     }
 }
 
@@ -295,12 +393,26 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
             if (id == IDC_SAVE) {
                 apply_settings_from_window(hwnd);
-                MessageBoxW(
-                    hwnd,
-                    L"Settings applied.\n\nSaving to settings.ini comes next in v0.4.",
-                    L"JesterStep",
-                    MB_OK | MB_ICONINFORMATION
-                );
+
+                if (save_settings()) {
+                    std::wstring msg =
+                        L"Settings saved to:\n\n" + get_settings_path();
+
+                    MessageBoxW(
+                        hwnd,
+                        msg.c_str(),
+                        L"JesterStep",
+                        MB_OK | MB_ICONINFORMATION
+                    );
+                } else {
+                    MessageBoxW(
+                        hwnd,
+                        L"Could not save settings.",
+                        L"JesterStep",
+                        MB_OK | MB_ICONERROR
+                    );
+                }
+
                 return 0;
             }
 
@@ -393,8 +505,7 @@ static void show_root_menu(HWND hwnd, int x, int y) {
             launch_app(L"explorer.exe");
             break;
         case 1003:
-            position_appbar(hwnd);
-            InvalidateRect(hwnd, nullptr, TRUE);
+            reload_saved_settings();
             break;
         case 1004:
             DestroyWindow(hwnd);
@@ -512,6 +623,8 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    load_settings();
+
     WNDCLASSW wc{};
     wc.lpfnWndProc = panel_wndproc;
     wc.hInstance = instance;
