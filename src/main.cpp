@@ -2,6 +2,7 @@
 #include <shellapi.h>
 #include <commdlg.h>
 #include <string>
+#include <vector>
 #include <cstdlib>
 
 static const wchar_t* APP_CLASS = L"JesterStepPanel";
@@ -19,6 +20,13 @@ static const int IDC_BG_PICK = 2007;
 static const int IDC_TEXT_COLOR = 2008;
 static const int IDC_TEXT_PICK = 2009;
 
+static const int MENU_SETTINGS = 1005;
+static const int MENU_RELOAD = 1003;
+static const int MENU_EXIT = 1004;
+
+static const int MENU_LAUNCHER_BASE = 3000;
+static const int MENU_LAUNCHER_LIMIT = 100;
+
 static HWND g_panel_hwnd = nullptr;
 static HWND g_settings_hwnd = nullptr;
 
@@ -28,6 +36,17 @@ static int g_panel_height = 36;
 
 static COLORREF g_panel_bg_color = RGB(24, 24, 28);
 static COLORREF g_panel_text_color = RGB(230, 230, 230);
+
+struct Launcher {
+    std::wstring name;
+    std::wstring command;
+};
+
+static std::vector<Launcher> g_launchers;
+
+static HMENU control_id(int id) {
+    return reinterpret_cast<HMENU>(static_cast<INT_PTR>(id));
+}
 
 static int clamp_int(int value, int min_value, int max_value) {
     if (value < min_value) {
@@ -83,6 +102,7 @@ static bool parse_hex_color(const std::wstring& text, COLORREF* out_color) {
 
 static std::wstring color_to_hex(COLORREF color) {
     wchar_t buffer[16]{};
+
     swprintf_s(
         buffer,
         L"#%02X%02X%02X",
@@ -90,6 +110,7 @@ static std::wstring color_to_hex(COLORREF color) {
         GetGValue(color),
         GetBValue(color)
     );
+
     return buffer;
 }
 
@@ -111,6 +132,67 @@ static std::wstring get_settings_path() {
 static void ensure_settings_dir() {
     std::wstring dir = get_settings_dir();
     CreateDirectoryW(dir.c_str(), nullptr);
+}
+
+static std::wstring read_ini_string(
+    const std::wstring& path,
+    const wchar_t* section,
+    const wchar_t* key,
+    const wchar_t* fallback
+) {
+    wchar_t buffer[512]{};
+
+    GetPrivateProfileStringW(
+        section,
+        key,
+        fallback,
+        buffer,
+        512,
+        path.c_str()
+    );
+
+    return buffer;
+}
+
+static void load_default_launchers() {
+    g_launchers.clear();
+
+    g_launchers.push_back({L"Notepad", L"notepad.exe"});
+    g_launchers.push_back({L"Explorer", L"explorer.exe"});
+}
+
+static void load_launchers(const std::wstring& path) {
+    g_launchers.clear();
+
+    int count = GetPrivateProfileIntW(
+        L"Launchers",
+        L"Count",
+        0,
+        path.c_str()
+    );
+
+    count = clamp_int(count, 0, MENU_LAUNCHER_LIMIT);
+
+    if (count <= 0) {
+        load_default_launchers();
+        return;
+    }
+
+    for (int i = 1; i <= count; ++i) {
+        wchar_t section[32]{};
+        swprintf_s(section, L"Launcher%d", i);
+
+        std::wstring name = read_ini_string(path, section, L"Name", L"");
+        std::wstring command = read_ini_string(path, section, L"Command", L"");
+
+        if (!name.empty() && !command.empty()) {
+            g_launchers.push_back({name, command});
+        }
+    }
+
+    if (g_launchers.empty()) {
+        load_default_launchers();
+    }
 }
 
 static void load_settings() {
@@ -166,6 +248,8 @@ static void load_settings() {
     if (parse_hex_color(text_color, &parsed_text)) {
         g_panel_text_color = parsed_text;
     }
+
+    load_launchers(path);
 }
 
 static bool save_settings() {
@@ -208,6 +292,35 @@ static bool save_settings() {
         text.c_str(),
         path.c_str()
     );
+
+    wchar_t launcher_count[32]{};
+    swprintf_s(launcher_count, L"%d", static_cast<int>(g_launchers.size()));
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Launchers",
+        L"Count",
+        launcher_count,
+        path.c_str()
+    );
+
+    for (size_t i = 0; i < g_launchers.size(); ++i) {
+        wchar_t section[32]{};
+        swprintf_s(section, L"Launcher%zu", i + 1);
+
+        ok = ok && WritePrivateProfileStringW(
+            section,
+            L"Name",
+            g_launchers[i].name.c_str(),
+            path.c_str()
+        );
+
+        ok = ok && WritePrivateProfileStringW(
+            section,
+            L"Command",
+            g_launchers[i].command.c_str(),
+            path.c_str()
+        );
+    }
 
     return ok;
 }
@@ -451,7 +564,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 170,
                 120,
                 hwnd,
-                (HMENU)IDC_PANEL_POSITION,
+                control_id(IDC_PANEL_POSITION),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -488,7 +601,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 24,
                 hwnd,
-                (HMENU)IDC_PANEL_HEIGHT,
+                control_id(IDC_PANEL_HEIGHT),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -535,7 +648,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 100,
                 24,
                 hwnd,
-                (HMENU)IDC_BG_COLOR,
+                control_id(IDC_BG_COLOR),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -550,7 +663,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 26,
                 hwnd,
-                (HMENU)IDC_BG_PICK,
+                control_id(IDC_BG_PICK),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -582,7 +695,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 100,
                 24,
                 hwnd,
-                (HMENU)IDC_TEXT_COLOR,
+                control_id(IDC_TEXT_COLOR),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -597,7 +710,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 26,
                 hwnd,
-                (HMENU)IDC_TEXT_PICK,
+                control_id(IDC_TEXT_PICK),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -612,7 +725,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 28,
                 hwnd,
-                (HMENU)IDC_APPLY,
+                control_id(IDC_APPLY),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -627,7 +740,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 28,
                 hwnd,
-                (HMENU)IDC_SAVE,
+                control_id(IDC_SAVE),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -642,7 +755,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 80,
                 28,
                 hwnd,
-                (HMENU)IDC_CANCEL,
+                control_id(IDC_CANCEL),
                 GetModuleHandleW(nullptr),
                 nullptr
             );
@@ -754,13 +867,23 @@ static void show_settings_window(HWND parent) {
 static void show_root_menu(HWND hwnd, int x, int y) {
     HMENU menu = CreatePopupMenu();
 
-    AppendMenuW(menu, MF_STRING, 1001, L"Notepad");
-    AppendMenuW(menu, MF_STRING, 1002, L"Explorer");
+    for (size_t i = 0; i < g_launchers.size() && i < MENU_LAUNCHER_LIMIT; ++i) {
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            MENU_LAUNCHER_BASE + static_cast<UINT>(i),
+            g_launchers[i].name.c_str()
+        );
+    }
+
+    if (!g_launchers.empty()) {
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    }
+
+    AppendMenuW(menu, MF_STRING, MENU_SETTINGS, L"Settings...");
+    AppendMenuW(menu, MF_STRING, MENU_RELOAD, L"Reload");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 1005, L"Settings...");
-    AppendMenuW(menu, MF_STRING, 1003, L"Reload");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 1004, L"Exit JesterStep");
+    AppendMenuW(menu, MF_STRING, MENU_EXIT, L"Exit JesterStep");
 
     SetForegroundWindow(hwnd);
 
@@ -776,22 +899,28 @@ static void show_root_menu(HWND hwnd, int x, int y) {
 
     DestroyMenu(menu);
 
+    if (
+        cmd >= MENU_LAUNCHER_BASE &&
+        cmd < MENU_LAUNCHER_BASE + static_cast<int>(g_launchers.size())
+    ) {
+        int index = cmd - MENU_LAUNCHER_BASE;
+        launch_app(g_launchers[index].command.c_str());
+        return;
+    }
+
     switch (cmd) {
-        case 1001:
-            launch_app(L"notepad.exe");
-            break;
-        case 1002:
-            launch_app(L"explorer.exe");
-            break;
-        case 1003:
+        case MENU_RELOAD:
             reload_saved_settings();
             break;
-        case 1004:
+
+        case MENU_EXIT:
             DestroyWindow(hwnd);
             break;
-        case 1005:
+
+        case MENU_SETTINGS:
             show_settings_window(hwnd);
             break;
+
         default:
             break;
     }
