@@ -5,6 +5,9 @@
 
 #include <windows.h>
 
+static const wchar_t* RUN_KEY = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+static const wchar_t* RUN_VALUE_NAME = L"JesterStep";
+
 static std::wstring get_settings_dir() {
     wchar_t appdata[MAX_PATH]{};
     DWORD len = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
@@ -43,6 +46,79 @@ static std::wstring read_ini_string(
     );
 
     return buffer;
+}
+
+static bool read_ini_bool(
+    const std::wstring& path,
+    const wchar_t* section,
+    const wchar_t* key,
+    bool fallback
+) {
+    std::wstring fallback_text = fallback ? L"true" : L"false";
+    std::wstring value = read_ini_string(path, section, key, fallback_text.c_str());
+
+    return
+        lstrcmpiW(value.c_str(), L"true") == 0 ||
+        lstrcmpiW(value.c_str(), L"1") == 0 ||
+        lstrcmpiW(value.c_str(), L"yes") == 0 ||
+        lstrcmpiW(value.c_str(), L"on") == 0;
+}
+
+static bool get_current_executable_path(std::wstring& path) {
+    wchar_t buffer[MAX_PATH]{};
+    DWORD len = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+
+    if (len == 0 || len >= MAX_PATH) {
+        return false;
+    }
+
+    path = buffer;
+    return true;
+}
+
+static bool update_startup_registration(bool enabled) {
+    HKEY key{};
+    LONG result = RegCreateKeyExW(
+        HKEY_CURRENT_USER,
+        RUN_KEY,
+        0,
+        nullptr,
+        0,
+        KEY_SET_VALUE,
+        nullptr,
+        &key,
+        nullptr
+    );
+
+    if (result != ERROR_SUCCESS) {
+        return false;
+    }
+
+    bool ok = true;
+
+    if (enabled) {
+        std::wstring path;
+        ok = get_current_executable_path(path);
+
+        if (ok) {
+            std::wstring command = L"\"" + path + L"\"";
+            result = RegSetValueExW(
+                key,
+                RUN_VALUE_NAME,
+                0,
+                REG_SZ,
+                reinterpret_cast<const BYTE*>(command.c_str()),
+                static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t))
+            );
+            ok = result == ERROR_SUCCESS;
+        }
+    } else {
+        result = RegDeleteValueW(key, RUN_VALUE_NAME);
+        ok = result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND;
+    }
+
+    RegCloseKey(key);
+    return ok;
 }
 
 static void load_default_launchers(AppState& state) {
@@ -88,6 +164,13 @@ static void load_launchers(AppState& state, const std::wstring& path) {
 
 void load_settings(AppState& state) {
     std::wstring path = get_settings_path();
+
+    state.start_with_windows = read_ini_bool(
+        path,
+        L"General",
+        L"StartWithWindows",
+        false
+    );
 
     wchar_t position[32]{};
     GetPrivateProfileStringW(
@@ -166,6 +249,15 @@ bool save_settings(const AppState& state) {
     bool ok = true;
 
     ok = ok && WritePrivateProfileStringW(
+        L"General",
+        L"StartWithWindows",
+        state.start_with_windows ? L"true" : L"false",
+        path.c_str()
+    );
+
+    bool startup_ok = update_startup_registration(state.start_with_windows);
+
+    ok = ok && WritePrivateProfileStringW(
         L"Panel",
         L"Position",
         state.panel_top ? L"top" : L"bottom",
@@ -236,5 +328,5 @@ bool save_settings(const AppState& state) {
         );
     }
 
-    return ok;
+    return ok && startup_ok;
 }

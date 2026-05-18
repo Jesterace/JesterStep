@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(JesterStep VERSION 0.1.0 LANGUAGES CXX)
+project(JesterStep VERSION 1.2.0 LANGUAGES CXX)
 
 add_executable(JesterStep WIN32
     src/appbar.cpp

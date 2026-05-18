@@ -7,6 +7,7 @@
 #include "task_list.h"
 
 #include <shellapi.h>
+#include <string>
 
 static void launch_app(const wchar_t* app) {
     ShellExecuteW(nullptr, L"open", app, nullptr, nullptr, SW_SHOWNORMAL);
@@ -26,6 +27,20 @@ static void reload_saved_settings(AppState& state) {
     }
 }
 
+static void show_about_dialog(HWND hwnd) {
+    std::wstring message =
+        L"JesterStep\n"
+        L"Version " + std::wstring(APP_VERSION) + L"\n\n"
+        L"A LiteStep-inspired Win32 shell/panel experiment.";
+
+    MessageBoxW(
+        hwnd,
+        message.c_str(),
+        L"About JesterStep",
+        MB_OK | MB_ICONINFORMATION
+    );
+}
+
 void show_root_menu(AppState& state, HWND hwnd, int x, int y) {
     HMENU menu = CreatePopupMenu();
 
@@ -43,6 +58,7 @@ void show_root_menu(AppState& state, HWND hwnd, int x, int y) {
     }
 
     AppendMenuW(menu, MF_STRING, MENU_SETTINGS, L"Settings...");
+    AppendMenuW(menu, MF_STRING, MENU_ABOUT, L"About...");
     AppendMenuW(menu, MF_STRING, MENU_RELOAD, L"Reload");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, MENU_EXIT, L"Exit JesterStep");
@@ -81,6 +97,10 @@ void show_root_menu(AppState& state, HWND hwnd, int x, int y) {
 
         case MENU_SETTINGS:
             show_settings_window(state, hwnd);
+            break;
+
+        case MENU_ABOUT:
+            show_about_dialog(hwnd);
             break;
 
         default:

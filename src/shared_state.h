@@ -5,6 +5,7 @@
 #include <vector>
 
 inline const wchar_t* APP_CLASS = L"JesterStepPanel";
+inline const wchar_t* APP_VERSION = L"1.2.0";
 inline const wchar_t* SETTINGS_CLASS = L"JesterStepSettings";
 inline const wchar_t* LAUNCHER_EDITOR_CLASS = L"JesterStepLauncherEditor";
 
@@ -22,6 +23,7 @@ inline const int IDC_TEXT_PICK = 2009;
 inline const int IDC_LAUNCHERS_BUTTON = 2010;
 inline const int IDC_ACCENT_COLOR = 2011;
 inline const int IDC_ACCENT_PICK = 2012;
+inline const int IDC_START_WITH_WINDOWS = 2013;
 
 inline const int IDC_LAUNCHER_LIST = 4001;
 inline const int IDC_LAUNCHER_NAME = 4002;
@@ -37,6 +39,7 @@ inline const int IDC_LAUNCHER_CLOSE = 4010;
 inline const int MENU_SETTINGS = 1005;
 inline const int MENU_RELOAD = 1003;
 inline const int MENU_EXIT = 1004;
+inline const int MENU_ABOUT = 1006;
 
 inline const int MENU_LAUNCHER_BASE = 3000;
 inline const int MENU_LAUNCHER_LIMIT = 100;
@@ -58,6 +61,7 @@ struct AppState {
 
     bool appbar_registered = false;
     bool panel_top = true;
+    bool start_with_windows = false;
     int panel_height = 36;
 
     COLORREF panel_bg_color = RGB(24, 24, 28);

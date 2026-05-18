@@ -16,6 +16,7 @@ void refresh_settings_window_controls(AppState& state, HWND hwnd) {
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
     HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
     HWND accent_edit = GetDlgItem(hwnd, IDC_ACCENT_COLOR);
+    HWND start_check = GetDlgItem(hwnd, IDC_START_WITH_WINDOWS);
 
     if (position_combo) {
         SendMessageW(position_combo, CB_SETCURSEL, state.panel_top ? 0 : 1, 0);
@@ -41,6 +42,14 @@ void refresh_settings_window_controls(AppState& state, HWND hwnd) {
         std::wstring accent = color_to_hex(state.accent_color);
         SetWindowTextW(accent_edit, accent.c_str());
     }
+
+    if (start_check) {
+        CheckDlgButton(
+            hwnd,
+            IDC_START_WITH_WINDOWS,
+            state.start_with_windows ? BST_CHECKED : BST_UNCHECKED
+        );
+    }
 }
 
 static bool apply_settings_from_window(AppState& state, HWND hwnd) {
@@ -49,6 +58,8 @@ static bool apply_settings_from_window(AppState& state, HWND hwnd) {
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
     HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
     HWND accent_edit = GetDlgItem(hwnd, IDC_ACCENT_COLOR);
+    bool new_start_with_windows =
+        IsDlgButtonChecked(hwnd, IDC_START_WITH_WINDOWS) == BST_CHECKED;
 
     LRESULT selected = SendMessageW(position_combo, CB_GETCURSEL, 0, 0);
     bool new_panel_top = selected != 1;
@@ -105,6 +116,7 @@ static bool apply_settings_from_window(AppState& state, HWND hwnd) {
     state.panel_bg_color = new_bg;
     state.panel_text_color = new_text;
     state.accent_color = new_accent;
+    state.start_with_windows = new_start_with_windows;
 
     refresh_settings_window_controls(state, hwnd);
 
@@ -368,10 +380,31 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             CreateWindowExW(
                 0,
                 L"BUTTON",
+                L"Start with Windows",
+                WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                140,
+                244,
+                180,
+                24,
+                hwnd,
+                control_id(IDC_START_WITH_WINDOWS),
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CheckDlgButton(
+                hwnd,
+                IDC_START_WITH_WINDOWS,
+                state && state->start_with_windows ? BST_CHECKED : BST_UNCHECKED
+            );
+
+            CreateWindowExW(
+                0,
+                L"BUTTON",
                 L"Launchers...",
                 WS_CHILD | WS_VISIBLE,
                 140,
-                244,
+                284,
                 120,
                 28,
                 hwnd,
@@ -386,7 +419,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Apply",
                 WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                 44,
-                304,
+                344,
                 80,
                 28,
                 hwnd,
@@ -401,7 +434,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Save",
                 WS_CHILD | WS_VISIBLE,
                 156,
-                304,
+                344,
                 80,
                 28,
                 hwnd,
@@ -416,7 +449,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Cancel",
                 WS_CHILD | WS_VISIBLE,
                 268,
-                304,
+                344,
                 80,
                 28,
                 hwnd,
@@ -532,7 +565,7 @@ void show_settings_window(AppState& state, HWND parent) {
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         420,
-        404,
+        444,
         parent,
         nullptr,
         GetModuleHandleW(nullptr),
