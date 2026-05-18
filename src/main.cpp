@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <commdlg.h>
 #include <string>
 #include <cstdlib>
 
@@ -13,6 +14,10 @@ static const int IDC_PANEL_HEIGHT = 2002;
 static const int IDC_APPLY = 2003;
 static const int IDC_SAVE = 2004;
 static const int IDC_CANCEL = 2005;
+static const int IDC_BG_COLOR = 2006;
+static const int IDC_BG_PICK = 2007;
+static const int IDC_TEXT_COLOR = 2008;
+static const int IDC_TEXT_PICK = 2009;
 
 static HWND g_panel_hwnd = nullptr;
 static HWND g_settings_hwnd = nullptr;
@@ -20,6 +25,9 @@ static HWND g_settings_hwnd = nullptr;
 static bool g_appbar_registered = false;
 static bool g_panel_top = true;
 static int g_panel_height = 36;
+
+static COLORREF g_panel_bg_color = RGB(24, 24, 28);
+static COLORREF g_panel_text_color = RGB(230, 230, 230);
 
 static int clamp_int(int value, int min_value, int max_value) {
     if (value < min_value) {
@@ -29,6 +37,60 @@ static int clamp_int(int value, int min_value, int max_value) {
         return max_value;
     }
     return value;
+}
+
+static int hex_digit_value(wchar_t ch) {
+    if (ch >= L'0' && ch <= L'9') {
+        return ch - L'0';
+    }
+    if (ch >= L'a' && ch <= L'f') {
+        return 10 + (ch - L'a');
+    }
+    if (ch >= L'A' && ch <= L'F') {
+        return 10 + (ch - L'A');
+    }
+    return -1;
+}
+
+static bool parse_hex_color(const std::wstring& text, COLORREF* out_color) {
+    int offset = 0;
+
+    if (text.length() == 7 && text[0] == L'#') {
+        offset = 1;
+    } else if (text.length() == 6) {
+        offset = 0;
+    } else {
+        return false;
+    }
+
+    int values[6]{};
+
+    for (int i = 0; i < 6; ++i) {
+        int value = hex_digit_value(text[offset + i]);
+        if (value < 0) {
+            return false;
+        }
+        values[i] = value;
+    }
+
+    int r = values[0] * 16 + values[1];
+    int g = values[2] * 16 + values[3];
+    int b = values[4] * 16 + values[5];
+
+    *out_color = RGB(r, g, b);
+    return true;
+}
+
+static std::wstring color_to_hex(COLORREF color) {
+    wchar_t buffer[16]{};
+    swprintf_s(
+        buffer,
+        L"#%02X%02X%02X",
+        GetRValue(color),
+        GetGValue(color),
+        GetBValue(color)
+    );
+    return buffer;
 }
 
 static std::wstring get_settings_dir() {
@@ -74,6 +136,36 @@ static void load_settings() {
     );
 
     g_panel_height = clamp_int(saved_height, 24, 96);
+
+    wchar_t bg_text[32]{};
+    GetPrivateProfileStringW(
+        L"Theme",
+        L"Background",
+        L"#18181C",
+        bg_text,
+        32,
+        path.c_str()
+    );
+
+    COLORREF parsed_bg{};
+    if (parse_hex_color(bg_text, &parsed_bg)) {
+        g_panel_bg_color = parsed_bg;
+    }
+
+    wchar_t text_color[32]{};
+    GetPrivateProfileStringW(
+        L"Theme",
+        L"Text",
+        L"#E6E6E6",
+        text_color,
+        32,
+        path.c_str()
+    );
+
+    COLORREF parsed_text{};
+    if (parse_hex_color(text_color, &parsed_text)) {
+        g_panel_text_color = parsed_text;
+    }
 }
 
 static bool save_settings() {
@@ -97,6 +189,23 @@ static bool save_settings() {
         L"Panel",
         L"Height",
         height_text,
+        path.c_str()
+    );
+
+    std::wstring bg = color_to_hex(g_panel_bg_color);
+    std::wstring text = color_to_hex(g_panel_text_color);
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Theme",
+        L"Background",
+        bg.c_str(),
+        path.c_str()
+    );
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Theme",
+        L"Text",
+        text.c_str(),
         path.c_str()
     );
 
@@ -204,6 +313,8 @@ static void notify_appbar_windowpos(HWND hwnd) {
 static void refresh_settings_window_controls(HWND hwnd) {
     HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
+    HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
+    HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
 
     if (position_combo) {
         SendMessageW(position_combo, CB_SETCURSEL, g_panel_top ? 0 : 1, 0);
@@ -214,20 +325,64 @@ static void refresh_settings_window_controls(HWND hwnd) {
         swprintf_s(height_text, L"%d", g_panel_height);
         SetWindowTextW(height_edit, height_text);
     }
+
+    if (bg_edit) {
+        std::wstring bg = color_to_hex(g_panel_bg_color);
+        SetWindowTextW(bg_edit, bg.c_str());
+    }
+
+    if (text_edit) {
+        std::wstring text = color_to_hex(g_panel_text_color);
+        SetWindowTextW(text_edit, text.c_str());
+    }
 }
 
-static void apply_settings_from_window(HWND hwnd) {
+static bool apply_settings_from_window(HWND hwnd) {
     HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
+    HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
+    HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
 
     LRESULT selected = SendMessageW(position_combo, CB_GETCURSEL, 0, 0);
-    g_panel_top = selected != 1;
+    bool new_panel_top = selected != 1;
 
     wchar_t height_text[32]{};
     GetWindowTextW(height_edit, height_text, 32);
 
-    int new_height = _wtoi(height_text);
-    g_panel_height = clamp_int(new_height, 24, 96);
+    int new_height = clamp_int(_wtoi(height_text), 24, 96);
+
+    wchar_t bg_text[32]{};
+    GetWindowTextW(bg_edit, bg_text, 32);
+
+    COLORREF new_bg{};
+    if (!parse_hex_color(bg_text, &new_bg)) {
+        MessageBoxW(
+            hwnd,
+            L"Background color must be a hex color like #18181C.",
+            L"JesterStep",
+            MB_OK | MB_ICONERROR
+        );
+        return false;
+    }
+
+    wchar_t text_color_text[32]{};
+    GetWindowTextW(text_edit, text_color_text, 32);
+
+    COLORREF new_text{};
+    if (!parse_hex_color(text_color_text, &new_text)) {
+        MessageBoxW(
+            hwnd,
+            L"Text color must be a hex color like #E6E6E6.",
+            L"JesterStep",
+            MB_OK | MB_ICONERROR
+        );
+        return false;
+    }
+
+    g_panel_top = new_panel_top;
+    g_panel_height = new_height;
+    g_panel_bg_color = new_bg;
+    g_panel_text_color = new_text;
 
     refresh_settings_window_controls(hwnd);
 
@@ -235,6 +390,8 @@ static void apply_settings_from_window(HWND hwnd) {
         position_appbar(g_panel_hwnd);
         InvalidateRect(g_panel_hwnd, nullptr, TRUE);
     }
+
+    return true;
 }
 
 static void reload_saved_settings() {
@@ -247,6 +404,22 @@ static void reload_saved_settings() {
 
     if (g_settings_hwnd) {
         refresh_settings_window_controls(g_settings_hwnd);
+    }
+}
+
+static void choose_color_for_edit(HWND hwnd, int edit_id, COLORREF current_color) {
+    static COLORREF custom_colors[16]{};
+
+    CHOOSECOLORW cc{};
+    cc.lStructSize = sizeof(CHOOSECOLORW);
+    cc.hwndOwner = hwnd;
+    cc.rgbResult = current_color;
+    cc.lpCustColors = custom_colors;
+    cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+
+    if (ChooseColorW(&cc)) {
+        std::wstring hex = color_to_hex(cc.rgbResult);
+        SetWindowTextW(GetDlgItem(hwnd, edit_id), hex.c_str());
     }
 }
 
@@ -337,11 +510,105 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
             CreateWindowExW(
                 0,
+                L"STATIC",
+                L"Background:",
+                WS_CHILD | WS_VISIBLE,
+                16,
+                124,
+                110,
+                24,
+                hwnd,
+                nullptr,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            std::wstring bg = color_to_hex(g_panel_bg_color);
+
+            CreateWindowExW(
+                WS_EX_CLIENTEDGE,
+                L"EDIT",
+                bg.c_str(),
+                WS_CHILD | WS_VISIBLE,
+                140,
+                120,
+                100,
+                24,
+                hwnd,
+                (HMENU)IDC_BG_COLOR,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
+                L"BUTTON",
+                L"Pick...",
+                WS_CHILD | WS_VISIBLE,
+                252,
+                119,
+                80,
+                26,
+                hwnd,
+                (HMENU)IDC_BG_PICK,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
+                L"STATIC",
+                L"Text:",
+                WS_CHILD | WS_VISIBLE,
+                16,
+                164,
+                110,
+                24,
+                hwnd,
+                nullptr,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            std::wstring text = color_to_hex(g_panel_text_color);
+
+            CreateWindowExW(
+                WS_EX_CLIENTEDGE,
+                L"EDIT",
+                text.c_str(),
+                WS_CHILD | WS_VISIBLE,
+                140,
+                160,
+                100,
+                24,
+                hwnd,
+                (HMENU)IDC_TEXT_COLOR,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
+                L"BUTTON",
+                L"Pick...",
+                WS_CHILD | WS_VISIBLE,
+                252,
+                159,
+                80,
+                26,
+                hwnd,
+                (HMENU)IDC_TEXT_PICK,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
                 L"BUTTON",
                 L"Apply",
                 WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                 44,
-                132,
+                224,
                 80,
                 28,
                 hwnd,
@@ -355,8 +622,8 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"BUTTON",
                 L"Save",
                 WS_CHILD | WS_VISIBLE,
-                136,
-                132,
+                156,
+                224,
                 80,
                 28,
                 hwnd,
@@ -370,8 +637,8 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"BUTTON",
                 L"Cancel",
                 WS_CHILD | WS_VISIBLE,
-                228,
-                132,
+                268,
+                224,
                 80,
                 28,
                 hwnd,
@@ -392,7 +659,9 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             }
 
             if (id == IDC_SAVE) {
-                apply_settings_from_window(hwnd);
+                if (!apply_settings_from_window(hwnd)) {
+                    return 0;
+                }
 
                 if (save_settings()) {
                     std::wstring msg =
@@ -418,6 +687,16 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
             if (id == IDC_CANCEL) {
                 DestroyWindow(hwnd);
+                return 0;
+            }
+
+            if (id == IDC_BG_PICK) {
+                choose_color_for_edit(hwnd, IDC_BG_COLOR, g_panel_bg_color);
+                return 0;
+            }
+
+            if (id == IDC_TEXT_PICK) {
+                choose_color_for_edit(hwnd, IDC_TEXT_COLOR, g_panel_text_color);
                 return 0;
             }
 
@@ -458,8 +737,8 @@ static void show_settings_window(HWND parent) {
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        360,
-        220,
+        420,
+        320,
         parent,
         nullptr,
         GetModuleHandleW(nullptr),
@@ -558,12 +837,12 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             RECT rc;
             GetClientRect(hwnd, &rc);
 
-            HBRUSH bg = CreateSolidBrush(RGB(24, 24, 28));
+            HBRUSH bg = CreateSolidBrush(g_panel_bg_color);
             FillRect(hdc, &rc, bg);
             DeleteObject(bg);
 
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(230, 230, 230));
+            SetTextColor(hdc, g_panel_text_color);
 
             HFONT font = CreateFontW(
                 18,

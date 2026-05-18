@@ -18,4 +18,5 @@ target_link_libraries(JesterStep PRIVATE
     user32
     gdi32
     shell32
+    comdlg32
 )

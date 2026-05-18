@@ -1,3 +1,0 @@
-C:/Users/jarma/Projects/JesterStep/build/CMakeFiles/JesterStep.dir
-C:/Users/jarma/Projects/JesterStep/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/jarma/Projects/JesterStep/build/CMakeFiles/ZERO_CHECK.dir
