@@ -2,4 +2,6 @@
 
 #include <windows.h>
 
-void show_launcher_editor(HWND parent);
+struct AppState;
+
+void show_launcher_editor(AppState& state, HWND parent);

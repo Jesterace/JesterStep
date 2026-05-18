@@ -17,10 +17,19 @@ static std::wstring get_time_text() {
 }
 
 static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    if (msg == WM_NCCREATE) {
+        CREATESTRUCTW* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+    }
+
+    AppState* state = app_state_from_hwnd(hwnd);
+
     switch (msg) {
         case WM_CREATE:
             SetTimer(hwnd, 1, 1000, nullptr);
-            register_appbar(hwnd);
+            if (state) {
+                register_appbar(*state, hwnd);
+            }
             return 0;
 
         case WM_TIMER:
@@ -28,24 +37,30 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             return 0;
 
         case WM_DISPLAYCHANGE:
-            position_appbar(hwnd);
+            if (state) {
+                position_appbar(*state, hwnd);
+            }
             InvalidateRect(hwnd, nullptr, TRUE);
             return 0;
 
         case WM_WINDOWPOSCHANGED:
-            notify_appbar_windowpos(hwnd);
+            if (state) {
+                notify_appbar_windowpos(*state, hwnd);
+            }
             return 0;
 
         case APPBAR_CALLBACK:
-            if (wparam == ABN_POSCHANGED) {
-                position_appbar(hwnd);
+            if (wparam == ABN_POSCHANGED && state) {
+                position_appbar(*state, hwnd);
             }
             return 0;
 
         case WM_RBUTTONUP: {
             POINT pt;
             GetCursorPos(&pt);
-            show_root_menu(hwnd, pt.x, pt.y);
+            if (state) {
+                show_root_menu(*state, hwnd, pt.x, pt.y);
+            }
             return 0;
         }
 
@@ -56,12 +71,15 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             RECT rc;
             GetClientRect(hwnd, &rc);
 
-            HBRUSH bg = CreateSolidBrush(g_panel_bg_color);
+            COLORREF bg_color = state ? state->panel_bg_color : RGB(24, 24, 28);
+            COLORREF text_color = state ? state->panel_text_color : RGB(230, 230, 230);
+
+            HBRUSH bg = CreateSolidBrush(bg_color);
             FillRect(hdc, &rc, bg);
             DeleteObject(bg);
 
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, g_panel_text_color);
+            SetTextColor(hdc, text_color);
 
             HFONT font = CreateFontW(
                 18,
@@ -112,7 +130,9 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
 
         case WM_DESTROY:
             KillTimer(hwnd, 1);
-            unregister_appbar(hwnd);
+            if (state) {
+                unregister_appbar(*state, hwnd);
+            }
             PostQuitMessage(0);
             return 0;
     }
@@ -120,7 +140,7 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-HWND create_panel_window(HINSTANCE instance) {
+HWND create_panel_window(HINSTANCE instance, AppState& state) {
     WNDCLASSW wc{};
     wc.lpfnWndProc = panel_wndproc;
     wc.hInstance = instance;
@@ -137,10 +157,10 @@ HWND create_panel_window(HINSTANCE instance) {
         0,
         0,
         GetSystemMetrics(SM_CXSCREEN),
-        g_panel_height,
+        state.panel_height,
         nullptr,
         nullptr,
         instance,
-        nullptr
+        &state
     );
 }

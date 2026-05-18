@@ -10,34 +10,34 @@
 #include <cstdlib>
 #include <string>
 
-void refresh_settings_window_controls(HWND hwnd) {
+void refresh_settings_window_controls(AppState& state, HWND hwnd) {
     HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
     HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
 
     if (position_combo) {
-        SendMessageW(position_combo, CB_SETCURSEL, g_panel_top ? 0 : 1, 0);
+        SendMessageW(position_combo, CB_SETCURSEL, state.panel_top ? 0 : 1, 0);
     }
 
     if (height_edit) {
         wchar_t height_text[32]{};
-        swprintf_s(height_text, L"%d", g_panel_height);
+        swprintf_s(height_text, L"%d", state.panel_height);
         SetWindowTextW(height_edit, height_text);
     }
 
     if (bg_edit) {
-        std::wstring bg = color_to_hex(g_panel_bg_color);
+        std::wstring bg = color_to_hex(state.panel_bg_color);
         SetWindowTextW(bg_edit, bg.c_str());
     }
 
     if (text_edit) {
-        std::wstring text = color_to_hex(g_panel_text_color);
+        std::wstring text = color_to_hex(state.panel_text_color);
         SetWindowTextW(text_edit, text.c_str());
     }
 }
 
-static bool apply_settings_from_window(HWND hwnd) {
+static bool apply_settings_from_window(AppState& state, HWND hwnd) {
     HWND position_combo = GetDlgItem(hwnd, IDC_PANEL_POSITION);
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
@@ -79,16 +79,16 @@ static bool apply_settings_from_window(HWND hwnd) {
         return false;
     }
 
-    g_panel_top = new_panel_top;
-    g_panel_height = new_height;
-    g_panel_bg_color = new_bg;
-    g_panel_text_color = new_text;
+    state.panel_top = new_panel_top;
+    state.panel_height = new_height;
+    state.panel_bg_color = new_bg;
+    state.panel_text_color = new_text;
 
-    refresh_settings_window_controls(hwnd);
+    refresh_settings_window_controls(state, hwnd);
 
-    if (g_panel_hwnd) {
-        position_appbar(g_panel_hwnd);
-        InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+    if (state.panel_hwnd) {
+        position_appbar(state, state.panel_hwnd);
+        InvalidateRect(state.panel_hwnd, nullptr, TRUE);
     }
 
     return true;
@@ -111,6 +111,13 @@ static void choose_color_for_edit(HWND hwnd, int edit_id, COLORREF current_color
 }
 
 static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    if (msg == WM_NCCREATE) {
+        CREATESTRUCTW* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+    }
+
+    AppState* state = app_state_from_hwnd(hwnd);
+
     switch (msg) {
         case WM_CREATE: {
             CreateWindowExW(
@@ -145,7 +152,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
             SendMessageW(position_combo, CB_ADDSTRING, 0, (LPARAM)L"Top");
             SendMessageW(position_combo, CB_ADDSTRING, 0, (LPARAM)L"Bottom");
-            SendMessageW(position_combo, CB_SETCURSEL, g_panel_top ? 0 : 1, 0);
+            SendMessageW(position_combo, CB_SETCURSEL, state && state->panel_top ? 0 : 1, 0);
 
             CreateWindowExW(
                 0,
@@ -163,7 +170,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             );
 
             wchar_t height_text[32]{};
-            swprintf_s(height_text, L"%d", g_panel_height);
+            swprintf_s(height_text, L"%d", state ? state->panel_height : 36);
 
             CreateWindowExW(
                 WS_EX_CLIENTEDGE,
@@ -210,7 +217,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 nullptr
             );
 
-            std::wstring bg = color_to_hex(g_panel_bg_color);
+            std::wstring bg = color_to_hex(state ? state->panel_bg_color : RGB(24, 24, 28));
 
             CreateWindowExW(
                 WS_EX_CLIENTEDGE,
@@ -257,7 +264,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 nullptr
             );
 
-            std::wstring text = color_to_hex(g_panel_text_color);
+            std::wstring text = color_to_hex(state ? state->panel_text_color : RGB(230, 230, 230));
 
             CreateWindowExW(
                 WS_EX_CLIENTEDGE,
@@ -355,17 +362,21 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
         case WM_COMMAND: {
             int id = LOWORD(wparam);
 
+            if (!state) {
+                return 0;
+            }
+
             if (id == IDC_APPLY) {
-                apply_settings_from_window(hwnd);
+                apply_settings_from_window(*state, hwnd);
                 return 0;
             }
 
             if (id == IDC_SAVE) {
-                if (!apply_settings_from_window(hwnd)) {
+                if (!apply_settings_from_window(*state, hwnd)) {
                     return 0;
                 }
 
-                if (save_settings()) {
+                if (save_settings(*state)) {
                     std::wstring msg =
                         L"Settings saved to:\n\n" + get_settings_path();
 
@@ -393,17 +404,17 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             }
 
             if (id == IDC_BG_PICK) {
-                choose_color_for_edit(hwnd, IDC_BG_COLOR, g_panel_bg_color);
+                choose_color_for_edit(hwnd, IDC_BG_COLOR, state->panel_bg_color);
                 return 0;
             }
 
             if (id == IDC_TEXT_PICK) {
-                choose_color_for_edit(hwnd, IDC_TEXT_COLOR, g_panel_text_color);
+                choose_color_for_edit(hwnd, IDC_TEXT_COLOR, state->panel_text_color);
                 return 0;
             }
 
             if (id == IDC_LAUNCHERS_BUTTON) {
-                show_launcher_editor(hwnd);
+                show_launcher_editor(*state, hwnd);
                 return 0;
             }
 
@@ -415,17 +426,19 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             return 0;
 
         case WM_NCDESTROY:
-            g_settings_hwnd = nullptr;
+            if (state) {
+                state->settings_hwnd = nullptr;
+            }
             return 0;
     }
 
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-void show_settings_window(HWND parent) {
-    if (g_settings_hwnd) {
-        ShowWindow(g_settings_hwnd, SW_SHOW);
-        SetForegroundWindow(g_settings_hwnd);
+void show_settings_window(AppState& state, HWND parent) {
+    if (state.settings_hwnd) {
+        ShowWindow(state.settings_hwnd, SW_SHOW);
+        SetForegroundWindow(state.settings_hwnd);
         return;
     }
 
@@ -437,7 +450,7 @@ void show_settings_window(HWND parent) {
 
     RegisterClassW(&wc);
 
-    g_settings_hwnd = CreateWindowExW(
+    state.settings_hwnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME,
         SETTINGS_CLASS,
         L"JesterStep Settings",
@@ -449,11 +462,11 @@ void show_settings_window(HWND parent) {
         parent,
         nullptr,
         GetModuleHandleW(nullptr),
-        nullptr
+        &state
     );
 
-    if (g_settings_hwnd) {
-        ShowWindow(g_settings_hwnd, SW_SHOW);
-        UpdateWindow(g_settings_hwnd);
+    if (state.settings_hwnd) {
+        ShowWindow(state.settings_hwnd, SW_SHOW);
+        UpdateWindow(state.settings_hwnd);
     }
 }

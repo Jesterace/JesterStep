@@ -2,4 +2,6 @@
 
 #include <windows.h>
 
-HWND create_panel_window(HINSTANCE instance);
+struct AppState;
+
+HWND create_panel_window(HINSTANCE instance, AppState& state);

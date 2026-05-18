@@ -2,4 +2,6 @@
 
 #include <windows.h>
 
-void show_root_menu(HWND hwnd, int x, int y);
+struct AppState;
+
+void show_root_menu(AppState& state, HWND hwnd, int x, int y);

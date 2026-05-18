@@ -21,41 +21,41 @@ static int get_selected_launcher_index(HWND hwnd) {
     return static_cast<int>(selected);
 }
 
-static void set_launcher_editor_fields(HWND hwnd, int index) {
+static void set_launcher_editor_fields(AppState& state, HWND hwnd, int index) {
     HWND name_edit = GetDlgItem(hwnd, IDC_LAUNCHER_NAME);
     HWND command_edit = GetDlgItem(hwnd, IDC_LAUNCHER_COMMAND);
 
-    if (index < 0 || index >= static_cast<int>(g_launchers.size())) {
+    if (index < 0 || index >= static_cast<int>(state.launchers.size())) {
         SetWindowTextW(name_edit, L"");
         SetWindowTextW(command_edit, L"");
         return;
     }
 
-    SetWindowTextW(name_edit, g_launchers[index].name.c_str());
-    SetWindowTextW(command_edit, g_launchers[index].command.c_str());
+    SetWindowTextW(name_edit, state.launchers[index].name.c_str());
+    SetWindowTextW(command_edit, state.launchers[index].command.c_str());
 }
 
-static void refresh_launcher_list(HWND hwnd, int selected_index = -1) {
+static void refresh_launcher_list(AppState& state, HWND hwnd, int selected_index = -1) {
     HWND list = GetDlgItem(hwnd, IDC_LAUNCHER_LIST);
 
     SendMessageW(list, LB_RESETCONTENT, 0, 0);
 
-    for (const Launcher& launcher : g_launchers) {
+    for (const Launcher& launcher : state.launchers) {
         std::wstring display = format_launcher_display(launcher);
         SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(display.c_str()));
     }
 
-    if (!g_launchers.empty()) {
+    if (!state.launchers.empty()) {
         selected_index = clamp_int(
             selected_index,
             0,
-            static_cast<int>(g_launchers.size()) - 1
+            static_cast<int>(state.launchers.size()) - 1
         );
 
         SendMessageW(list, LB_SETCURSEL, selected_index, 0);
-        set_launcher_editor_fields(hwnd, selected_index);
+        set_launcher_editor_fields(state, hwnd, selected_index);
     } else {
-        set_launcher_editor_fields(hwnd, -1);
+        set_launcher_editor_fields(state, hwnd, -1);
     }
 }
 
@@ -82,6 +82,13 @@ static bool read_launcher_fields(HWND hwnd, Launcher* out_launcher) {
 }
 
 static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    if (msg == WM_NCCREATE) {
+        CREATESTRUCTW* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+    }
+
+    AppState* state = app_state_from_hwnd(hwnd);
+
     switch (msg) {
         case WM_CREATE: {
             CreateWindowExW(
@@ -264,7 +271,9 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
                 nullptr
             );
 
-            refresh_launcher_list(hwnd, 0);
+            if (state) {
+                refresh_launcher_list(*state, hwnd, 0);
+            }
             return 0;
         }
 
@@ -272,14 +281,18 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             int id = LOWORD(wparam);
             int notify = HIWORD(wparam);
 
+            if (!state) {
+                return 0;
+            }
+
             if (id == IDC_LAUNCHER_LIST && notify == LBN_SELCHANGE) {
                 int index = get_selected_launcher_index(hwnd);
-                set_launcher_editor_fields(hwnd, index);
+                set_launcher_editor_fields(*state, hwnd, index);
                 return 0;
             }
 
             if (id == IDC_LAUNCHER_ADD) {
-                if (g_launchers.size() >= MENU_LAUNCHER_LIMIT) {
+                if (state->launchers.size() >= MENU_LAUNCHER_LIMIT) {
                     MessageBoxW(
                         hwnd,
                         L"Launcher limit reached.",
@@ -294,11 +307,11 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
                     return 0;
                 }
 
-                g_launchers.push_back(launcher);
-                refresh_launcher_list(hwnd, static_cast<int>(g_launchers.size()) - 1);
+                state->launchers.push_back(launcher);
+                refresh_launcher_list(*state, hwnd, static_cast<int>(state->launchers.size()) - 1);
 
-                if (g_panel_hwnd) {
-                    InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+                if (state->panel_hwnd) {
+                    InvalidateRect(state->panel_hwnd, nullptr, TRUE);
                 }
 
                 return 0;
@@ -307,7 +320,7 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             if (id == IDC_LAUNCHER_UPDATE) {
                 int index = get_selected_launcher_index(hwnd);
 
-                if (index < 0 || index >= static_cast<int>(g_launchers.size())) {
+                if (index < 0 || index >= static_cast<int>(state->launchers.size())) {
                     MessageBoxW(
                         hwnd,
                         L"Select a launcher to update.",
@@ -322,11 +335,11 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
                     return 0;
                 }
 
-                g_launchers[index] = launcher;
-                refresh_launcher_list(hwnd, index);
+                state->launchers[index] = launcher;
+                refresh_launcher_list(*state, hwnd, index);
 
-                if (g_panel_hwnd) {
-                    InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+                if (state->panel_hwnd) {
+                    InvalidateRect(state->panel_hwnd, nullptr, TRUE);
                 }
 
                 return 0;
@@ -335,7 +348,7 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             if (id == IDC_LAUNCHER_REMOVE) {
                 int index = get_selected_launcher_index(hwnd);
 
-                if (index < 0 || index >= static_cast<int>(g_launchers.size())) {
+                if (index < 0 || index >= static_cast<int>(state->launchers.size())) {
                     MessageBoxW(
                         hwnd,
                         L"Select a launcher to remove.",
@@ -345,16 +358,16 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
                     return 0;
                 }
 
-                g_launchers.erase(g_launchers.begin() + index);
+                state->launchers.erase(state->launchers.begin() + index);
 
-                if (index >= static_cast<int>(g_launchers.size())) {
-                    index = static_cast<int>(g_launchers.size()) - 1;
+                if (index >= static_cast<int>(state->launchers.size())) {
+                    index = static_cast<int>(state->launchers.size()) - 1;
                 }
 
-                refresh_launcher_list(hwnd, index);
+                refresh_launcher_list(*state, hwnd, index);
 
-                if (g_panel_hwnd) {
-                    InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+                if (state->panel_hwnd) {
+                    InvalidateRect(state->panel_hwnd, nullptr, TRUE);
                 }
 
                 return 0;
@@ -363,12 +376,12 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             if (id == IDC_LAUNCHER_UP) {
                 int index = get_selected_launcher_index(hwnd);
 
-                if (index > 0 && index < static_cast<int>(g_launchers.size())) {
-                    Launcher temp = g_launchers[index - 1];
-                    g_launchers[index - 1] = g_launchers[index];
-                    g_launchers[index] = temp;
+                if (index > 0 && index < static_cast<int>(state->launchers.size())) {
+                    Launcher temp = state->launchers[index - 1];
+                    state->launchers[index - 1] = state->launchers[index];
+                    state->launchers[index] = temp;
 
-                    refresh_launcher_list(hwnd, index - 1);
+                    refresh_launcher_list(*state, hwnd, index - 1);
                 }
 
                 return 0;
@@ -377,19 +390,19 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             if (id == IDC_LAUNCHER_DOWN) {
                 int index = get_selected_launcher_index(hwnd);
 
-                if (index >= 0 && index + 1 < static_cast<int>(g_launchers.size())) {
-                    Launcher temp = g_launchers[index + 1];
-                    g_launchers[index + 1] = g_launchers[index];
-                    g_launchers[index] = temp;
+                if (index >= 0 && index + 1 < static_cast<int>(state->launchers.size())) {
+                    Launcher temp = state->launchers[index + 1];
+                    state->launchers[index + 1] = state->launchers[index];
+                    state->launchers[index] = temp;
 
-                    refresh_launcher_list(hwnd, index + 1);
+                    refresh_launcher_list(*state, hwnd, index + 1);
                 }
 
                 return 0;
             }
 
             if (id == IDC_LAUNCHER_SAVE) {
-                if (save_settings()) {
+                if (save_settings(*state)) {
                     MessageBoxW(
                         hwnd,
                         L"Launchers saved.",
@@ -421,17 +434,19 @@ static LRESULT CALLBACK launcher_editor_wndproc(HWND hwnd, UINT msg, WPARAM wpar
             return 0;
 
         case WM_NCDESTROY:
-            g_launcher_editor_hwnd = nullptr;
+            if (state) {
+                state->launcher_editor_hwnd = nullptr;
+            }
             return 0;
     }
 
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-void show_launcher_editor(HWND parent) {
-    if (g_launcher_editor_hwnd) {
-        ShowWindow(g_launcher_editor_hwnd, SW_SHOW);
-        SetForegroundWindow(g_launcher_editor_hwnd);
+void show_launcher_editor(AppState& state, HWND parent) {
+    if (state.launcher_editor_hwnd) {
+        ShowWindow(state.launcher_editor_hwnd, SW_SHOW);
+        SetForegroundWindow(state.launcher_editor_hwnd);
         return;
     }
 
@@ -443,7 +458,7 @@ void show_launcher_editor(HWND parent) {
 
     RegisterClassW(&wc);
 
-    g_launcher_editor_hwnd = CreateWindowExW(
+    state.launcher_editor_hwnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME,
         LAUNCHER_EDITOR_CLASS,
         L"JesterStep Launchers",
@@ -455,11 +470,11 @@ void show_launcher_editor(HWND parent) {
         parent,
         nullptr,
         GetModuleHandleW(nullptr),
-        nullptr
+        &state
     );
 
-    if (g_launcher_editor_hwnd) {
-        ShowWindow(g_launcher_editor_hwnd, SW_SHOW);
-        UpdateWindow(g_launcher_editor_hwnd);
+    if (state.launcher_editor_hwnd) {
+        ShowWindow(state.launcher_editor_hwnd, SW_SHOW);
+        UpdateWindow(state.launcher_editor_hwnd);
     }
 }

@@ -44,18 +44,24 @@ struct Launcher {
     std::wstring command;
 };
 
-inline HWND g_panel_hwnd = nullptr;
-inline HWND g_settings_hwnd = nullptr;
-inline HWND g_launcher_editor_hwnd = nullptr;
+struct AppState {
+    HWND panel_hwnd = nullptr;
+    HWND settings_hwnd = nullptr;
+    HWND launcher_editor_hwnd = nullptr;
 
-inline bool g_appbar_registered = false;
-inline bool g_panel_top = true;
-inline int g_panel_height = 36;
+    bool appbar_registered = false;
+    bool panel_top = true;
+    int panel_height = 36;
 
-inline COLORREF g_panel_bg_color = RGB(24, 24, 28);
-inline COLORREF g_panel_text_color = RGB(230, 230, 230);
+    COLORREF panel_bg_color = RGB(24, 24, 28);
+    COLORREF panel_text_color = RGB(230, 230, 230);
 
-inline std::vector<Launcher> g_launchers;
+    std::vector<Launcher> launchers;
+};
+
+inline AppState* app_state_from_hwnd(HWND hwnd) {
+    return reinterpret_cast<AppState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+}
 
 inline HMENU control_id(int id) {
     return reinterpret_cast<HMENU>(static_cast<INT_PTR>(id));

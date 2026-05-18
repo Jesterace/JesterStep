@@ -4,11 +4,11 @@
 
 #include <shellapi.h>
 
-void position_appbar(HWND hwnd) {
+void position_appbar(AppState& state, HWND hwnd) {
     APPBARDATA abd{};
     abd.cbSize = sizeof(APPBARDATA);
     abd.hWnd = hwnd;
-    abd.uEdge = g_panel_top ? ABE_TOP : ABE_BOTTOM;
+    abd.uEdge = state.panel_top ? ABE_TOP : ABE_BOTTOM;
 
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
@@ -16,20 +16,20 @@ void position_appbar(HWND hwnd) {
     abd.rc.left = 0;
     abd.rc.right = screen_w;
 
-    if (g_panel_top) {
+    if (state.panel_top) {
         abd.rc.top = 0;
-        abd.rc.bottom = g_panel_height;
+        abd.rc.bottom = state.panel_height;
     } else {
-        abd.rc.top = screen_h - g_panel_height;
+        abd.rc.top = screen_h - state.panel_height;
         abd.rc.bottom = screen_h;
     }
 
     SHAppBarMessage(ABM_QUERYPOS, &abd);
 
-    if (g_panel_top) {
-        abd.rc.bottom = abd.rc.top + g_panel_height;
+    if (state.panel_top) {
+        abd.rc.bottom = abd.rc.top + state.panel_height;
     } else {
-        abd.rc.top = abd.rc.bottom - g_panel_height;
+        abd.rc.top = abd.rc.bottom - state.panel_height;
     }
 
     SHAppBarMessage(ABM_SETPOS, &abd);
@@ -44,9 +44,9 @@ void position_appbar(HWND hwnd) {
     );
 }
 
-bool register_appbar(HWND hwnd) {
-    if (g_appbar_registered) {
-        position_appbar(hwnd);
+bool register_appbar(AppState& state, HWND hwnd) {
+    if (state.appbar_registered) {
+        position_appbar(state, hwnd);
         return true;
     }
 
@@ -59,13 +59,13 @@ bool register_appbar(HWND hwnd) {
         return false;
     }
 
-    g_appbar_registered = true;
-    position_appbar(hwnd);
+    state.appbar_registered = true;
+    position_appbar(state, hwnd);
     return true;
 }
 
-void unregister_appbar(HWND hwnd) {
-    if (!g_appbar_registered) {
+void unregister_appbar(AppState& state, HWND hwnd) {
+    if (!state.appbar_registered) {
         return;
     }
 
@@ -74,11 +74,11 @@ void unregister_appbar(HWND hwnd) {
     abd.hWnd = hwnd;
 
     SHAppBarMessage(ABM_REMOVE, &abd);
-    g_appbar_registered = false;
+    state.appbar_registered = false;
 }
 
-void notify_appbar_windowpos(HWND hwnd) {
-    if (!g_appbar_registered) {
+void notify_appbar_windowpos(AppState& state, HWND hwnd) {
+    if (!state.appbar_registered) {
         return;
     }
 

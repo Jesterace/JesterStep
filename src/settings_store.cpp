@@ -45,15 +45,15 @@ static std::wstring read_ini_string(
     return buffer;
 }
 
-static void load_default_launchers() {
-    g_launchers.clear();
+static void load_default_launchers(AppState& state) {
+    state.launchers.clear();
 
-    g_launchers.push_back({L"Notepad", L"notepad.exe"});
-    g_launchers.push_back({L"Explorer", L"explorer.exe"});
+    state.launchers.push_back({L"Notepad", L"notepad.exe"});
+    state.launchers.push_back({L"Explorer", L"explorer.exe"});
 }
 
-static void load_launchers(const std::wstring& path) {
-    g_launchers.clear();
+static void load_launchers(AppState& state, const std::wstring& path) {
+    state.launchers.clear();
 
     int count = GetPrivateProfileIntW(
         L"Launchers",
@@ -65,7 +65,7 @@ static void load_launchers(const std::wstring& path) {
     count = clamp_int(count, 0, MENU_LAUNCHER_LIMIT);
 
     if (count <= 0) {
-        load_default_launchers();
+        load_default_launchers(state);
         return;
     }
 
@@ -77,16 +77,16 @@ static void load_launchers(const std::wstring& path) {
         std::wstring command = read_ini_string(path, section, L"Command", L"");
 
         if (!name.empty() && !command.empty()) {
-            g_launchers.push_back({name, command});
+            state.launchers.push_back({name, command});
         }
     }
 
-    if (g_launchers.empty()) {
-        load_default_launchers();
+    if (state.launchers.empty()) {
+        load_default_launchers(state);
     }
 }
 
-void load_settings() {
+void load_settings(AppState& state) {
     std::wstring path = get_settings_path();
 
     wchar_t position[32]{};
@@ -99,7 +99,7 @@ void load_settings() {
         path.c_str()
     );
 
-    g_panel_top = lstrcmpiW(position, L"bottom") != 0;
+    state.panel_top = lstrcmpiW(position, L"bottom") != 0;
 
     int saved_height = GetPrivateProfileIntW(
         L"Panel",
@@ -108,7 +108,7 @@ void load_settings() {
         path.c_str()
     );
 
-    g_panel_height = clamp_int(saved_height, 24, 96);
+    state.panel_height = clamp_int(saved_height, 24, 96);
 
     wchar_t bg_text[32]{};
     GetPrivateProfileStringW(
@@ -122,7 +122,7 @@ void load_settings() {
 
     COLORREF parsed_bg{};
     if (parse_hex_color(bg_text, &parsed_bg)) {
-        g_panel_bg_color = parsed_bg;
+        state.panel_bg_color = parsed_bg;
     }
 
     wchar_t text_color[32]{};
@@ -137,13 +137,13 @@ void load_settings() {
 
     COLORREF parsed_text{};
     if (parse_hex_color(text_color, &parsed_text)) {
-        g_panel_text_color = parsed_text;
+        state.panel_text_color = parsed_text;
     }
 
-    load_launchers(path);
+    load_launchers(state, path);
 }
 
-bool save_settings() {
+bool save_settings(const AppState& state) {
     ensure_settings_dir();
 
     std::wstring path = get_settings_path();
@@ -153,12 +153,12 @@ bool save_settings() {
     ok = ok && WritePrivateProfileStringW(
         L"Panel",
         L"Position",
-        g_panel_top ? L"top" : L"bottom",
+        state.panel_top ? L"top" : L"bottom",
         path.c_str()
     );
 
     wchar_t height_text[32]{};
-    swprintf_s(height_text, L"%d", g_panel_height);
+    swprintf_s(height_text, L"%d", state.panel_height);
 
     ok = ok && WritePrivateProfileStringW(
         L"Panel",
@@ -167,8 +167,8 @@ bool save_settings() {
         path.c_str()
     );
 
-    std::wstring bg = color_to_hex(g_panel_bg_color);
-    std::wstring text = color_to_hex(g_panel_text_color);
+    std::wstring bg = color_to_hex(state.panel_bg_color);
+    std::wstring text = color_to_hex(state.panel_text_color);
 
     ok = ok && WritePrivateProfileStringW(
         L"Theme",
@@ -185,7 +185,7 @@ bool save_settings() {
     );
 
     wchar_t launcher_count[32]{};
-    swprintf_s(launcher_count, L"%d", static_cast<int>(g_launchers.size()));
+    swprintf_s(launcher_count, L"%d", static_cast<int>(state.launchers.size()));
 
     ok = ok && WritePrivateProfileStringW(
         L"Launchers",
@@ -194,21 +194,21 @@ bool save_settings() {
         path.c_str()
     );
 
-    for (size_t i = 0; i < g_launchers.size(); ++i) {
+    for (size_t i = 0; i < state.launchers.size(); ++i) {
         wchar_t section[32]{};
         swprintf_s(section, L"Launcher%zu", i + 1);
 
         ok = ok && WritePrivateProfileStringW(
             section,
             L"Name",
-            g_launchers[i].name.c_str(),
+            state.launchers[i].name.c_str(),
             path.c_str()
         );
 
         ok = ok && WritePrivateProfileStringW(
             section,
             L"Command",
-            g_launchers[i].command.c_str(),
+            state.launchers[i].command.c_str(),
             path.c_str()
         );
     }

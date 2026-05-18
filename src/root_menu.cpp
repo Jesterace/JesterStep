@@ -11,31 +11,32 @@ static void launch_app(const wchar_t* app) {
     ShellExecuteW(nullptr, L"open", app, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-static void reload_saved_settings() {
-    load_settings();
+static void reload_saved_settings(AppState& state) {
+    load_settings(state);
 
-    if (g_panel_hwnd) {
-        position_appbar(g_panel_hwnd);
-        InvalidateRect(g_panel_hwnd, nullptr, TRUE);
+    if (state.panel_hwnd) {
+        position_appbar(state, state.panel_hwnd);
+        InvalidateRect(state.panel_hwnd, nullptr, TRUE);
     }
 
-    if (g_settings_hwnd) {
-        refresh_settings_window_controls(g_settings_hwnd);
+    if (state.settings_hwnd) {
+        refresh_settings_window_controls(state, state.settings_hwnd);
     }
 }
-void show_root_menu(HWND hwnd, int x, int y) {
+
+void show_root_menu(AppState& state, HWND hwnd, int x, int y) {
     HMENU menu = CreatePopupMenu();
 
-    for (size_t i = 0; i < g_launchers.size() && i < MENU_LAUNCHER_LIMIT; ++i) {
+    for (size_t i = 0; i < state.launchers.size() && i < MENU_LAUNCHER_LIMIT; ++i) {
         AppendMenuW(
             menu,
             MF_STRING,
             MENU_LAUNCHER_BASE + static_cast<UINT>(i),
-            g_launchers[i].name.c_str()
+            state.launchers[i].name.c_str()
         );
     }
 
-    if (!g_launchers.empty()) {
+    if (!state.launchers.empty()) {
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     }
 
@@ -60,16 +61,16 @@ void show_root_menu(HWND hwnd, int x, int y) {
 
     if (
         cmd >= MENU_LAUNCHER_BASE &&
-        cmd < MENU_LAUNCHER_BASE + static_cast<int>(g_launchers.size())
+        cmd < MENU_LAUNCHER_BASE + static_cast<int>(state.launchers.size())
     ) {
         int index = cmd - MENU_LAUNCHER_BASE;
-        launch_app(g_launchers[index].command.c_str());
+        launch_app(state.launchers[index].command.c_str());
         return;
     }
 
     switch (cmd) {
         case MENU_RELOAD:
-            reload_saved_settings();
+            reload_saved_settings(state);
             break;
 
         case MENU_EXIT:
@@ -77,7 +78,7 @@ void show_root_menu(HWND hwnd, int x, int y) {
             break;
 
         case MENU_SETTINGS:
-            show_settings_window(hwnd);
+            show_settings_window(state, hwnd);
             break;
 
         default:

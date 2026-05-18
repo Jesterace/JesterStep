@@ -5,16 +5,17 @@
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
-    load_settings();
+    AppState state;
+    load_settings(state);
 
-    g_panel_hwnd = create_panel_window(instance);
+    state.panel_hwnd = create_panel_window(instance, state);
 
-    if (!g_panel_hwnd) {
+    if (!state.panel_hwnd) {
         return 1;
     }
 
-    ShowWindow(g_panel_hwnd, SW_SHOW);
-    UpdateWindow(g_panel_hwnd);
+    ShowWindow(state.panel_hwnd, SW_SHOW);
+    UpdateWindow(state.panel_hwnd);
 
     MSG msg{};
     while (GetMessageW(&msg, nullptr, 0, 0)) {
