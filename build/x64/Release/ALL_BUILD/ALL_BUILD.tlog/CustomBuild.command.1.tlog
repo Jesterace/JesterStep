@@ -1,0 +1,10 @@
+^C:\USERS\JARMA\PROJECTS\JESTERSTEP\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/jarma/Projects/JesterStep -BC:/Users/jarma/Projects/JesterStep/build --check-stamp-file C:/Users/jarma/Projects/JesterStep/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
