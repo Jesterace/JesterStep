@@ -140,6 +140,21 @@ void load_settings(AppState& state) {
         state.panel_text_color = parsed_text;
     }
 
+    wchar_t accent_color[32]{};
+    GetPrivateProfileStringW(
+        L"Theme",
+        L"Accent",
+        L"#409CFF",
+        accent_color,
+        32,
+        path.c_str()
+    );
+
+    COLORREF parsed_accent{};
+    if (parse_hex_color(accent_color, &parsed_accent)) {
+        state.accent_color = parsed_accent;
+    }
+
     load_launchers(state, path);
 }
 
@@ -169,6 +184,7 @@ bool save_settings(const AppState& state) {
 
     std::wstring bg = color_to_hex(state.panel_bg_color);
     std::wstring text = color_to_hex(state.panel_text_color);
+    std::wstring accent = color_to_hex(state.accent_color);
 
     ok = ok && WritePrivateProfileStringW(
         L"Theme",
@@ -181,6 +197,13 @@ bool save_settings(const AppState& state) {
         L"Theme",
         L"Text",
         text.c_str(),
+        path.c_str()
+    );
+
+    ok = ok && WritePrivateProfileStringW(
+        L"Theme",
+        L"Accent",
+        accent.c_str(),
         path.c_str()
     );
 

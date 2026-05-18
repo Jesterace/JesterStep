@@ -62,7 +62,12 @@ static BOOL CALLBACK enum_task_window(HWND hwnd, LPARAM lparam) {
 
 void refresh_task_list(AppState& state) {
     state.tasks.clear();
+    state.foreground_hwnd = GetForegroundWindow();
     EnumWindows(enum_task_window, reinterpret_cast<LPARAM>(&state));
+
+    if (state.hovered_task_index >= static_cast<int>(state.tasks.size())) {
+        state.hovered_task_index = -1;
+    }
 }
 
 void activate_task_window(HWND hwnd) {

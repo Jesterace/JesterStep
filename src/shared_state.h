@@ -20,6 +20,8 @@ inline const int IDC_BG_PICK = 2007;
 inline const int IDC_TEXT_COLOR = 2008;
 inline const int IDC_TEXT_PICK = 2009;
 inline const int IDC_LAUNCHERS_BUTTON = 2010;
+inline const int IDC_ACCENT_COLOR = 2011;
+inline const int IDC_ACCENT_PICK = 2012;
 
 inline const int IDC_LAUNCHER_LIST = 4001;
 inline const int IDC_LAUNCHER_NAME = 4002;
@@ -60,9 +62,12 @@ struct AppState {
 
     COLORREF panel_bg_color = RGB(24, 24, 28);
     COLORREF panel_text_color = RGB(230, 230, 230);
+    COLORREF accent_color = RGB(64, 156, 255);
 
     std::vector<Launcher> launchers;
     std::vector<TaskEntry> tasks;
+    HWND foreground_hwnd = nullptr;
+    int hovered_task_index = -1;
 };
 
 inline AppState* app_state_from_hwnd(HWND hwnd) {

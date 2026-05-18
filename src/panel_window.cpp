@@ -17,6 +17,30 @@ static const int TASK_GAP = 6;
 static const int TASK_MIN_WIDTH = 80;
 static const int TASK_MAX_WIDTH = 220;
 
+static COLORREF blend_color(COLORREF base, COLORREF overlay, int overlay_percent) {
+    overlay_percent = clamp_int(overlay_percent, 0, 100);
+    int base_percent = 100 - overlay_percent;
+
+    int r = (GetRValue(base) * base_percent + GetRValue(overlay) * overlay_percent) / 100;
+    int g = (GetGValue(base) * base_percent + GetGValue(overlay) * overlay_percent) / 100;
+    int b = (GetBValue(base) * base_percent + GetBValue(overlay) * overlay_percent) / 100;
+
+    return RGB(r, g, b);
+}
+
+static bool is_foreground_task(HWND task_hwnd, HWND foreground_hwnd) {
+    if (!task_hwnd || !foreground_hwnd) {
+        return false;
+    }
+
+    if (task_hwnd == foreground_hwnd) {
+        return true;
+    }
+
+    HWND foreground_root = GetAncestor(foreground_hwnd, GA_ROOT);
+    return foreground_root && task_hwnd == foreground_root;
+}
+
 static std::wstring get_time_text() {
     SYSTEMTIME st{};
     GetLocalTime(&st);
@@ -92,6 +116,7 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     switch (msg) {
         case WM_CREATE:
             if (state) {
+                state->foreground_hwnd = GetForegroundWindow();
                 register_appbar(*state, hwnd);
                 refresh_task_list(*state);
             }
@@ -101,7 +126,10 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
 
         case WM_TIMER:
             if (state && wparam == TASK_TIMER_ID) {
+                state->foreground_hwnd = GetForegroundWindow();
                 refresh_task_list(*state);
+            } else if (state) {
+                state->foreground_hwnd = GetForegroundWindow();
             }
             InvalidateRect(hwnd, nullptr, TRUE);
             return 0;
@@ -151,6 +179,34 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             return 0;
         }
 
+        case WM_MOUSEMOVE: {
+            if (!state) {
+                return 0;
+            }
+
+            POINT pt{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+            int hovered_index = hit_test_task(hwnd, *state, pt);
+
+            if (hovered_index != state->hovered_task_index) {
+                state->hovered_task_index = hovered_index;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+
+            TRACKMOUSEEVENT track{};
+            track.cbSize = sizeof(TRACKMOUSEEVENT);
+            track.dwFlags = TME_LEAVE;
+            track.hwndTrack = hwnd;
+            TrackMouseEvent(&track);
+            return 0;
+        }
+
+        case WM_MOUSELEAVE:
+            if (state && state->hovered_task_index != -1) {
+                state->hovered_task_index = -1;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
@@ -160,6 +216,7 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
 
             COLORREF bg_color = state ? state->panel_bg_color : RGB(24, 24, 28);
             COLORREF text_color = state ? state->panel_text_color : RGB(230, 230, 230);
+            COLORREF accent_color = state ? state->accent_color : RGB(64, 156, 255);
 
             HBRUSH bg = CreateSolidBrush(bg_color);
             FillRect(hdc, &rc, bg);
@@ -198,10 +255,10 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
             );
 
             if (state) {
-                HBRUSH task_brush = CreateSolidBrush(RGB(42, 42, 48));
-                HPEN task_pen = CreatePen(PS_SOLID, 1, RGB(70, 70, 78));
-                HBRUSH old_brush = (HBRUSH)SelectObject(hdc, task_brush);
-                HPEN old_pen = (HPEN)SelectObject(hdc, task_pen);
+                state->foreground_hwnd = GetForegroundWindow();
+                COLORREF task_color = blend_color(bg_color, text_color, 10);
+                COLORREF hover_color = blend_color(bg_color, accent_color, 18);
+                COLORREF border_color = blend_color(bg_color, text_color, 28);
 
                 int task_count = static_cast<int>(state->tasks.size());
                 for (int i = 0; i < task_count; ++i) {
@@ -210,6 +267,18 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                         continue;
                     }
 
+                    bool active = is_foreground_task(state->tasks[i].hwnd, state->foreground_hwnd);
+                    bool hovered = i == state->hovered_task_index;
+
+                    COLORREF fill_color = hovered || active ? hover_color : task_color;
+                    COLORREF pen_color = active ? accent_color : (hovered ? blend_color(border_color, accent_color, 50) : border_color);
+                    int pen_width = active ? 2 : 1;
+
+                    HBRUSH task_brush = CreateSolidBrush(fill_color);
+                    HPEN task_pen = CreatePen(PS_SOLID, pen_width, pen_color);
+                    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, task_brush);
+                    HPEN old_pen = (HPEN)SelectObject(hdc, task_pen);
+
                     Rectangle(
                         hdc,
                         task_rect.left,
@@ -217,6 +286,11 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                         task_rect.right,
                         task_rect.bottom
                     );
+
+                    SelectObject(hdc, old_pen);
+                    SelectObject(hdc, old_brush);
+                    DeleteObject(task_pen);
+                    DeleteObject(task_brush);
 
                     RECT text_rect = task_rect;
                     text_rect.left += 8;
@@ -230,11 +304,6 @@ static LRESULT CALLBACK panel_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
                         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS
                     );
                 }
-
-                SelectObject(hdc, old_pen);
-                SelectObject(hdc, old_brush);
-                DeleteObject(task_pen);
-                DeleteObject(task_brush);
             }
 
             std::wstring time = get_time_text();

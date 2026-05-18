@@ -15,6 +15,7 @@ void refresh_settings_window_controls(AppState& state, HWND hwnd) {
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
     HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
+    HWND accent_edit = GetDlgItem(hwnd, IDC_ACCENT_COLOR);
 
     if (position_combo) {
         SendMessageW(position_combo, CB_SETCURSEL, state.panel_top ? 0 : 1, 0);
@@ -35,6 +36,11 @@ void refresh_settings_window_controls(AppState& state, HWND hwnd) {
         std::wstring text = color_to_hex(state.panel_text_color);
         SetWindowTextW(text_edit, text.c_str());
     }
+
+    if (accent_edit) {
+        std::wstring accent = color_to_hex(state.accent_color);
+        SetWindowTextW(accent_edit, accent.c_str());
+    }
 }
 
 static bool apply_settings_from_window(AppState& state, HWND hwnd) {
@@ -42,6 +48,7 @@ static bool apply_settings_from_window(AppState& state, HWND hwnd) {
     HWND height_edit = GetDlgItem(hwnd, IDC_PANEL_HEIGHT);
     HWND bg_edit = GetDlgItem(hwnd, IDC_BG_COLOR);
     HWND text_edit = GetDlgItem(hwnd, IDC_TEXT_COLOR);
+    HWND accent_edit = GetDlgItem(hwnd, IDC_ACCENT_COLOR);
 
     LRESULT selected = SendMessageW(position_combo, CB_GETCURSEL, 0, 0);
     bool new_panel_top = selected != 1;
@@ -79,10 +86,25 @@ static bool apply_settings_from_window(AppState& state, HWND hwnd) {
         return false;
     }
 
+    wchar_t accent_color_text[32]{};
+    GetWindowTextW(accent_edit, accent_color_text, 32);
+
+    COLORREF new_accent{};
+    if (!parse_hex_color(accent_color_text, &new_accent)) {
+        MessageBoxW(
+            hwnd,
+            L"Accent color must be a hex color like #409CFF.",
+            L"JesterStep",
+            MB_OK | MB_ICONERROR
+        );
+        return false;
+    }
+
     state.panel_top = new_panel_top;
     state.panel_height = new_height;
     state.panel_bg_color = new_bg;
     state.panel_text_color = new_text;
+    state.accent_color = new_accent;
 
     refresh_settings_window_controls(state, hwnd);
 
@@ -237,7 +259,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             CreateWindowExW(
                 0,
                 L"BUTTON",
-                L"Pick...",
+                L"Pick",
                 WS_CHILD | WS_VISIBLE,
                 252,
                 119,
@@ -284,7 +306,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
             CreateWindowExW(
                 0,
                 L"BUTTON",
-                L"Pick...",
+                L"Pick",
                 WS_CHILD | WS_VISIBLE,
                 252,
                 159,
@@ -298,11 +320,58 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
 
             CreateWindowExW(
                 0,
+                L"STATIC",
+                L"Accent:",
+                WS_CHILD | WS_VISIBLE,
+                16,
+                204,
+                110,
+                24,
+                hwnd,
+                nullptr,
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            std::wstring accent = color_to_hex(state ? state->accent_color : RGB(64, 156, 255));
+
+            CreateWindowExW(
+                WS_EX_CLIENTEDGE,
+                L"EDIT",
+                accent.c_str(),
+                WS_CHILD | WS_VISIBLE,
+                140,
+                200,
+                100,
+                24,
+                hwnd,
+                control_id(IDC_ACCENT_COLOR),
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
+                L"BUTTON",
+                L"Pick",
+                WS_CHILD | WS_VISIBLE,
+                252,
+                199,
+                80,
+                26,
+                hwnd,
+                control_id(IDC_ACCENT_PICK),
+                GetModuleHandleW(nullptr),
+                nullptr
+            );
+
+            CreateWindowExW(
+                0,
                 L"BUTTON",
                 L"Launchers...",
                 WS_CHILD | WS_VISIBLE,
                 140,
-                204,
+                244,
                 120,
                 28,
                 hwnd,
@@ -317,7 +386,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Apply",
                 WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                 44,
-                260,
+                304,
                 80,
                 28,
                 hwnd,
@@ -332,7 +401,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Save",
                 WS_CHILD | WS_VISIBLE,
                 156,
-                260,
+                304,
                 80,
                 28,
                 hwnd,
@@ -347,7 +416,7 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 L"Cancel",
                 WS_CHILD | WS_VISIBLE,
                 268,
-                260,
+                304,
                 80,
                 28,
                 hwnd,
@@ -413,6 +482,11 @@ static LRESULT CALLBACK settings_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPA
                 return 0;
             }
 
+            if (id == IDC_ACCENT_PICK) {
+                choose_color_for_edit(hwnd, IDC_ACCENT_COLOR, state->accent_color);
+                return 0;
+            }
+
             if (id == IDC_LAUNCHERS_BUTTON) {
                 show_launcher_editor(*state, hwnd);
                 return 0;
@@ -458,7 +532,7 @@ void show_settings_window(AppState& state, HWND parent) {
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         420,
-        360,
+        404,
         parent,
         nullptr,
         GetModuleHandleW(nullptr),
