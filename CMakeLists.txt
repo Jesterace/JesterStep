@@ -3,7 +3,14 @@ cmake_minimum_required(VERSION 3.20)
 project(JesterStep VERSION 0.1.0 LANGUAGES CXX)
 
 add_executable(JesterStep WIN32
+    src/appbar.cpp
+    src/color_utils.cpp
+    src/launcher_editor_window.cpp
     src/main.cpp
+    src/panel_window.cpp
+    src/root_menu.cpp
+    src/settings_store.cpp
+    src/settings_window.cpp
 )
 
 target_compile_features(JesterStep PRIVATE cxx_std_17)
